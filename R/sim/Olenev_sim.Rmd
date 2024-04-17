@@ -1,0 +1,158 @@
+---
+title: "Untitled"
+author: "Roman Olenev"
+date: "2024-03-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Метод обратных функций
+```{r}
+const <- 1/2*exp(4)+1+1/3*exp(-9)
+const
+b <- exp(4)/(2*const)
+b
+```
+
+```{r}
+res1 <- c(1:300000)
+for (i in c(1:length(res1))){
+  alpha <- runif(1)
+  if (alpha<b){
+   res1[i] <- log(2*alpha*const)/2 
+  } else if (alpha<b+1/const){
+    res1[i] <- alpha*const-1/2*exp(4)+2
+  } else {
+    res1[i] <- -1/3*log(3*(1/2*exp(4)+1+1/3*exp(-9)-alpha*const))
+  }
+}
+```
+
+
+```{r}
+hist(res1, freq=FALSE, breaks=100, ylim=c(0,1/const*exp(4)),xlab="x",main="Метод обратных функций")
+x1 <- seq(-10,2,0.01)
+x2 <- seq(2,3,0.01)
+x3 <- seq(3,10,0.01)
+lines(x1,1/const*exp(2*x1), col="orange", lwd=2)
+lines(x2,rep(1/const, length(x2)), col="red", lwd=2)
+lines(x3,1/const*exp(-3*x3), col="blue", lwd=2)
+legend("topleft", legend=c("c*exp(2x)", "c","c*exp(-3x)"), col=c("orange","red","blue"), lwd=2)
+```
+
+Метод дискретной декомпозиции
+```{r}
+c1 <- 1/const
+s1 <- c1*exp(4)/2
+```
+
+
+```{r}
+res2 <- c(1:300000)
+for (i in c(1:length(res2))){
+  alpha1 <- runif(1)
+  alpha2 <- runif(1)
+  if (alpha1<s1){
+   res2[i] <- log(alpha2)/2+2
+  } else if (alpha1<s1+c1){
+    res2[i] <- alpha2+2
+  } else {
+    res2[i] <- -1/3*log(alpha2)+3
+  }
+}
+```
+
+
+```{r}
+hist(res2, freq=FALSE, breaks=100, ylim=c(0,1/const*exp(4)),xlab="x",main="Метод дискретной декомпозиции")
+x1 <- seq(-10,2,0.01)
+x2 <- seq(2,3,0.01)
+x3 <- seq(3,10,0.01)
+lines(x1,1/const*exp(2*x1), col="orange", lwd=2)
+lines(x2,rep(1/const, length(x2)), col="red", lwd=2)
+lines(x3,1/const*exp(-3*x3), col="blue", lwd=2)
+legend("topleft", legend=c("c*exp(2x)", "c","c*exp(-3x)"), col=c("orange","red","blue"), lwd=2)
+```
+
+
+```{r}
+res3 <- c(1:300000)
+for (i in c(1:length(res3))){
+  alpha <- runif(1)
+  if (alpha<s1){
+   res3[i] <- log(alpha/s1)/2+2
+  } else if (alpha<s1+c1){
+    res3[i] <- (alpha-s1)/c1+2
+  } else {
+    res3[i] <- -1/3*log((alpha-s1-c1)*3*exp(9)/c1)+3
+  }
+}
+```
+
+
+```{r}
+hist(res3, freq=FALSE, breaks=100, ylim=c(0,1/const*exp(4)),xlab="x",main="Метод дискретной декомпозиции с одним обращением к генератору")
+x1 <- seq(-10,2,0.01)
+x2 <- seq(2,3,0.01)
+x3 <- seq(3,10,0.01)
+lines(x1,1/const*exp(2*x1), col="orange", lwd=2)
+lines(x2,rep(1/const, length(x2)), col="red", lwd=2)
+lines(x3,1/const*exp(-3*x3), col="blue", lwd=2)
+legend("topleft", legend=c("c*exp(2x)", "c","c*exp(-3x)"), col=c("orange","red","blue"), lwd=2)
+```
+
+
+
+```{r}
+lmd <- 1
+x1 <- seq(-10,2,0.01)
+x2 <- seq(2,3,0.01)
+x3 <- seq(3,10,0.01)
+x4 <- seq(-5,5,0.01)
+plot(x1,1/const*exp(2*x1),"l", xlim=c(-5,5),xlab="x",main="Плотности p(x) и q(x)", col="red", ylab="f(x)",lwd=1)
+lines(x2,rep(1/const, length(x2)), col="red")
+lines(x3,1/const*exp(-3*x3),col="red")
+lines(x4, lmd/(pi*(lmd^2+(x4-2)^2)), col="blue")
+legend("topleft", legend=c("p(x)", "q(x)"), col=c("red","blue"), lwd=1)
+```
+
+Метод отбора
+```{r}
+M <- (1/const*exp(4))*pi
+M
+```
+
+```{r}
+res4 <- c(1:300000)
+
+for (i in c(1:length(res4))){
+  alpha1 <- runif(1)
+  alpha2 <- runif(1)
+  t1 <- tan(pi*alpha1)
+  t2 <- 1+t1^2
+  while ((t1<0)&(exp(2*t1)*t2<alpha2)|(t1>0)&(t1<1)&(t2<exp(4)*alpha2)|(t1>1)&(exp(-3*t1-10)*t2<alpha2)){
+    alpha1 <- runif(1)
+    alpha2 <- runif(1)
+    t1 <- tan(pi*alpha1)
+    t2 <- 1+t1^2
+  }
+  res4[i] <- t1+2
+}
+```
+
+
+```{r}
+hist(res4, freq=FALSE, breaks=100, ylim=c(0,1/const*exp(4)),xlab="x",main="Метод отбора")
+x1 <- seq(-10,2,0.01)
+x2 <- seq(2,3,0.01)
+x3 <- seq(3,10,0.01)
+lines(x1,1/const*exp(2*x1), col="orange", lwd=2)
+lines(x2,rep(1/const, length(x2)), col="red", lwd=2)
+lines(x3,1/const*exp(-3*x3), col="blue", lwd=2)
+legend("topleft", legend=c("c*exp(2x)", "c","c*exp(-3x)"), col=c("orange","red","blue"), lwd=2)
+```
+
+

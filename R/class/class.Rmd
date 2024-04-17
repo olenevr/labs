@@ -1,0 +1,174 @@
+---
+title: "Untitled"
+author: "Roman Olenev"
+date: "2023-12-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("FactoMineR")
+library("factoextra")
+library(ggplot2)
+library(GGally)
+library(tidyr)
+library("dplyr")
+library("caTools")
+library(FSA)
+library(ROCR)
+```
+
+```{r}
+dataset <- read.csv("C:/Users/roman/Downloads/possum.csv")
+head(dataset)
+dataset <- dataset %>% select(-case)
+```
+
+Датасет состоит из девяти морфометрических измерений каждого из 104 горных опоссумов, пойманных в ловушку в семи местах от Южной Виктории до центрального Квинсленда. Задача состоит в классификации опоссумов по популяции. 
+
+site - место, в котором поймали опоссума
+
+Pop - популяция: Vic - Victoria, other - New South Wales or Queensland
+
+sex - пол
+
+age - возраст
+
+hdlngth - длина головы в мм
+
+skullw - ширина черепа в мм
+
+totlngth - полная длина в см
+
+taill - длина хвоста
+
+footlgth - длина лапы
+
+earconch - длина ушной раковины
+
+eye - длина правого глаза
+
+chest - обхват груди в см
+
+belly - обхват живота в см
+
+Удаляем пропуски в данных.
+```{r}
+na_num <- sapply(dataset, function(y) sum(length(which(is.na(y)))))
+na_num
+```
+
+```{r}
+dataset1 <- drop_na(dataset)
+sum(is.na(dataset1))
+```
+
+pairplot, видна неоднородность.
+```{r, message=F}
+dataset2 <- dataset1 %>% select(-c(sex, site))
+ggpairs(dataset2, aes(color=Pop), diag=list(continuous="barDiag"))
+```
+
+PCA для визуализации.
+```{r}
+dataset_pca <- dataset2 %>% select(-Pop)
+pcaclass <- PCA(dataset_pca)
+```
+
+```{r, message=FALSE}
+fviz_pca_biplot(pcaclass, repel = TRUE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(dataset2$Pop),
+                )
+```
+
+
+MANOVA. Смотрим на то, отличаются ли средние по признакам между разными группами. Критерии Roy и Wilks отвергают гипотезу о равенстве, средние отличаются. 
+```{r, message=FALSE}
+library("MASS")
+full.manova <- manova(cbind(age,hdlngth,skullw,totlngth,taill,footlgth,earconch,eye,chest,belly) ~ Pop, data = dataset2)
+
+summary(full.manova, 'Wilks')
+summary(full.manova, 'Roy')
+full.manova
+```
+
+Классификация с помощью LDA по всем данным.
+```{r}
+full.lda <- lda(dataset2[,2:11], dataset2[,1]) #LDA
+full.lda
+```
+
+Предсказания и ошибки классификации LDA (confusion matrix). Классифицировали без ошибок. 
+```{r}
+full.ldap <- predict(full.lda, dataset2[,2:11]) #предсказываем
+#таблица ошибок классификации
+full.ldapc <- full.ldap$class 
+lda_full <- table(full.ldapc, dataset2[,1])
+lda_full
+diag(prop.table(lda_full, 2)) #Столбцы - настоящие классы, строки - предсказанные классы.
+```
+
+Так как данных мало, оценим качество предсказаний LDA с помощью кросс-валидации (confusion matrix). Ошибок тоже нет.  
+```{r}
+#Кросс-валидация
+cv.lda <- lda(dataset2[,2:11], dataset2[,1], CV = T)
+cv.ldac <- cv.lda$class
+lda_cv <- table(cv.ldac, dataset2[,1])
+lda_cv
+diag(prop.table(lda_cv, 2))
+```
+
+Классификация с помощью QDA по всем данным.
+```{r}
+#QDA
+full.qda <- qda(dataset2[,2:11], dataset2[,1])
+full.qda
+```
+
+Предсказания и ошибки классификации QDA (confusion matrix). Ошибок нет.
+```{r}
+full.qdap <- predict(full.qda, dataset2[,2:11])
+full.qdapc <- full.qdap$class
+qda_full <- table(full.qdapc, dataset2[,1])
+qda_full
+diag(prop.table(qda_full, 2))
+```
+
+Confusion matrix для QDA, кросс-валидация. Есть одна ошибка - неправильно классифицировали индивида с классом Vic.
+```{r}
+#Кросс-валидация
+cv.qda <- qda(dataset2[,2:11], dataset2[,1], CV = T)
+cv.qdac <- cv.qda$class
+qda_cv <- table(cv.qdac, dataset2[,1])
+qda_cv
+diag(prop.table(qda_cv, 2))
+```
+
+Это индивид под номером 17. 
+```{r}
+which(cv.qdac!=dataset2[,1])
+```
+
+Построим ROC-кривые. Для LDA.
+```{r}
+two.cv.lda <- lda(dataset2[,2:11], dataset2[,1], CV = T)
+predcv <- prediction(two.cv.lda$posterior[,2], dataset2[,1])
+perfcv <- performance(predcv, "tpr", "fpr")
+plot(perfcv, colorize = TRUE)
+AUCcv <- performance(predcv, "auc")
+abline(a = 0, b = 1)
+text(x = .25, y = .65, paste("AUC = ", round(AUCcv@y.values[[1]],5)))
+```
+
+Для QDA.
+```{r}
+predcv2 <- prediction(cv.qda$posterior[,2], dataset2[,1])
+perfcv2 <- performance(predcv2, "tpr", "fpr")
+plot(perfcv2, colorize = TRUE)
+AUCcv2 <- performance(predcv2, "auc")
+abline(a = 0, b = 1)
+text(x = .25, y = .65, paste("AUC = ", round(AUCcv2@y.values[[1]],5)))
+```
+
+LDA в данном случае лучше, так как точнее при кросс-валидации. 

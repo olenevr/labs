@@ -1,0 +1,51 @@
+---
+title: "Untitled"
+author: "Roman Olenev"
+date: "2023-11-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("FactoMineR")
+library("factoextra")
+library(ggplot2)
+library(GGally)
+library(psych)
+library(GPArotation)
+library("dplyr")
+```
+
+
+```{r}
+datasetf <- read.csv("C:/Users/roman/Downloads/2018.csv")
+head(datasetf)
+datasetf <- datasetf %>% select(-c(Overall.rank,Country.or.region, Score))
+```
+
+Данные - индекс счастья стран за 2018 год и показатели, по которым он вычисляется. 
+
+pairplot.
+```{r, message=FALSE}
+ggpairs(datasetf)
+```
+
+PCA. Видно, что сильно коррелируют социальная поддержка, ожидаемая продолжительность здоровой жизни и ВВП на душу населения.
+```{r}
+resf <- PCA(datasetf)
+```
+
+Факторный анализ для 2 факторов с ортогональным методом вращения Varimax. Гипотеза о значимости модели отвергается при уровне значимости 0.05. Первый фактор сильно коррелирует с ВВП, продолжительностью жизни и социальной поддержкой. Второй фактор коррелирует с остальными признаками. 
+```{r}
+factor_analysis <- factanal(datasetf,
+                            factors = 2, 
+                            rotation = "varimax") 
+factor_analysis
+```
+
+Косоугольное вращение Oblimin. Phi - матрица корреляций между факторами после вращения. 
+```{r}
+fact <- GPFRSoblq(factor_analysis$loadings, method = "oblimin")
+fact
+```
+

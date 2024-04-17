@@ -1,0 +1,235 @@
+---
+title: "Критерий Манна-Кендалла"
+author: "Olenev Roman"
+date: "27.11.2023"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+header-includes: \usepackage[russian]{babel}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(randtests)
+library(Kendall)
+```
+
+
+Критерий Манна-Кендалла для проверки временного ряда на наличие монотонного тренда - статистический критерий, основанный на ранговом коэффициенте корреляции Кендалла. 
+
+Коэффициент корреляции Кендалла $\tau(\xi,\eta)$. Пусть даны независимые $(\xi_1,\eta_1)^T,(\xi_2,\eta_2)^T\sim (\xi,\eta)^T$. Тогда
+$$\tau(\xi,\eta)=\rho(sign(\xi_2-\xi_1),sign(\eta_2-\eta_1))=P((\xi_2-\xi_1)(\eta_2-\eta_1)>0)-P((\xi_2-\xi_1)(\eta_2-\eta_1)<0).$$
+
+Пусть дана выборка $(x_1,y_1),(x_2,y_2),...,(x_n,y_n)$, тогда
+$$\hat\tau=\frac{n_c-n_d}{n_0},$$
+
+где $\hat\tau$ - оценка коэффициента корреляции Кендалла, $n_c$ - количество одинаково упорядоченных пар, $n_d$ - количество по-разному упорядоченных пар, $n_0$ - количество комбинаций пар, то есть $n_0=C_n^2=n(n-1)/2$. Пара $(x_i,y_i),(x_j,y_j)$ считается одинаково упорядоченной, если $sign(x_i-x_j)=sign(y_i-y_j)$, в противном случае пара считается по-разному упорядоченной.
+
+Для проверки временного ряда на наличие монотонного тренда используют критерий оценки значимости коэффициента корреляции Кендалла.
+
+Пусть $\xi$ - номера точек, $\eta$ - значения временного ряда. Тогда $H_0: \tau=0$, если $H_0$ отвергается, то у временного ряда есть монотонный тренд. 
+
+При верной нулевой гипотезе распределение $\hat\tau$ аппроксимируется нормальным распределением $N(0,\frac{2(2n+5)}{9n(n-1)})$. Для проверки гипотезы используется статистика $z=\frac{\tau}{\sqrt{D_\tau}}=\frac{n_c-n_d}{\sqrt{n(n-1)(2n+5)/18}}$, которая сходится по распределению к стандартному нормальному распределению при $n\xrightarrow{}\infty$.
+
+## Численное моделирование, ошибка первого рода
+
+Исследуем ошибку первого рода, рассмотрев распределение p-values для ряда, удовлетворяющего нулевой гипотезе: $f(t)=0+N(0,1),\ t=\overline{1,200}$. Будем 10000 раз генерировать временной ряд длины 200 и находить для него p-value. На графиках представлены пример временного ряда и распределение p-values.
+
+```{r}
+set.seed(42)
+plot(ts(rnorm(200)),ylab="f(t)")
+temp <- c(1:10000)
+for (i in c(1:10000)){
+  temp[i] <- MannKendall(ts(rnorm(200)))$sl
+}
+plot(ecdf(temp),verticals=TRUE,do.points=FALSE,col.01line=FALSE,ylab="alpha_1", 
+     xlab="alpha",col="red",main="ecdf")
+x <- seq(0, 1, .005)
+prob <- punif(x,0,1)
+lines(x, prob,col="blue")
+legend("topleft",legend = c("F_p-val", "F_unif"), col = c("red","blue"),lwd=1)
+```
+
+Получили распределение, соответствующее точному критерию.
+
+Исследуем ошибку первого рода, рассмотрев распределение p-values для ряда, удовлетворяющего нулевой гипотезе и соответствующего функции:$f(x)=4sin(x)+N(0,1)$. 200 значений временного ряда $f(x)$ вычисляются для 200 значений $x$ (с одинаковым шагом) из промежутка $[0+i/10,end\cdot5+i/10]$, где $end\sim U(1,2),\ i=\overline{1,10000}$.
+
+```{r}
+set.seed(42)
+end = runif(1,1,2)
+sq = seq(0+i/10,end*5+i/10,length.out=200)
+plot(ts(4*sin(sq)+rnorm(length(sq))),ylab="f(t)")
+temp2 <- c(1:10000)
+for (i in c(1:10000)){
+  end = runif(1,1,2)
+  sq = seq(0+i/10,end*5+i/10,length.out=200)
+  temp2[i] <- MannKendall(ts(4*sin(sq)+rnorm(length(sq))))$sl
+}
+plot(ecdf(temp2),verticals=TRUE,do.points=FALSE,col.01line=FALSE,
+     ylab="alpha_1", xlab="alpha",col="red",main="ecdf")
+x <- seq(0, 1, .005)
+prob <- punif(x,0,1)
+lines(x, prob,col="blue")
+legend("bottomright",legend = c("F_p-val", "F_unif"), col = c("red","blue"),lwd=1)
+```
+
+Получили распределение, соответствующее радикальному критерию. 
+
+Посмотрим, что будет, если 200 значений временного ряда $f(x)$ вычисляются для 200 значений $x$ (с одинаковым шагом) из промежутка $[0+i/10,end\cdot50+i/10]$, где $end\sim U(1,2),\ i=\overline{1,10000}$. (то есть временной ряд, подающийся на вход, содержит в себе сильно больше полных периодов сезонности)
+
+```{r}
+set.seed(42)
+end = runif(1,1,2)
+sq = seq(0+i/10,end*50+i/10,length.out=200)
+plot(ts(4*sin(sq)+rnorm(length(sq))),ylab="f(t)")
+temp3 <- c(1:10000)
+for (i in c(1:10000)){
+  end = runif(1,1,2)
+  sq = seq(0+i/10,end*50+i/10,length.out=200)
+  temp3[i] <- MannKendall(ts(4*sin(sq)+rnorm(length(sq))))$sl
+}
+plot(ecdf(temp3),verticals=TRUE,do.points=FALSE,col.01line=FALSE,
+     ylab="alpha_1", xlab="alpha",col="red",main="ecdf")
+x <- seq(0, 1, .005)
+prob <- punif(x,0,1)
+lines(x, prob,col="blue")
+legend("topleft",legend = c("F_p-val", "F_unif"), col = c("red","blue"),lwd=1)
+```
+
+Получили распределение, соответствующее консервативному критерию.
+
+Исследуем ошибку первого рода, рассмотрев распределение p-values для ряда, удовлетворяющего нулевой гипотезе и соответствующего функции:$f(x)=4sin(x)+N(0,1)$. 200 значений временного ряда $f(x)$ вычисляются для 200 значений $x$ (с одинаковым шагом) из промежутка $[0,end\cdot\pi+\pi]$, где $end$ равновероятно принмает значения $\{2,4,6,8,10\}$. (равное число промежутков возрастания и убывания)
+
+```{r}
+set.seed(42)
+sq = seq(0,4*pi+pi,length.out=200)
+plot(ts(4*sin(sq)+rnorm(length(sq))),ylab="f(t)")
+temp4 <- c(1:10000)
+for (i in c(1:10000)){
+  end = sample.int(5,1)*2
+  sq = seq(0,end*pi+pi,length.out=200)
+  temp4[i] <- MannKendall(ts(4*sin(sq)+rnorm(length(sq))))$sl
+}
+plot(ecdf(temp4),xlim=c(0,1),ylim=c(0,1),verticals=TRUE,do.points=FALSE,
+     col.01line=FALSE,ylab="alpha_1", xlab="alpha",col="red",
+     main="ecdf")
+x <- seq(0, 1, .005)
+prob <- punif(x,0,1)
+lines(x, prob, col="blue")
+legend("topleft",legend = c("F_p-val", "F_unif"), col = c("red","blue"),lwd=1)
+```
+
+Получили распределение, соответствующее консервативному критерию.
+
+Таким образом, критерием можно пользоваться, если у временного ряда отсутствует сезонность. Можно пытаться использовать критерий для ряда с сезонностью, если число полных периодов сезонности, входящих во временной ряд, достаточно большое (относительно длины ряда), а также если временной ряд состоит из равного числа промежутков возрастания и убывания. 
+
+
+## Численное моделирование, мощность
+
+Исследуем мощность критерия, рассмотрев распределение p-values для ряда, удовлетворяющего альтернативной гипотезе и соответствующего функции:$f(x)=x+N(0,1)$. 200 значений временного ряда $f(x)$ вычисляются для 200 значений $x$ (с одинаковым шагом) из промежутка $[0,10]$.
+
+```{r}
+set.seed(42)
+plot(ts(seq(0,10,length.out=200)+rnorm(200)),ylab="f(t)")
+temp5 <- c(1:10000)
+for (i in c(1:10000)){
+  sq <- seq(0,10,length.out=200)
+  temp5[i] <- MannKendall(ts(sq+rnorm(length(sq))))$sl
+}
+plot(ecdf(temp5),xlim=c(0,1),ylim=c(0,1),verticals=TRUE,do.points=FALSE,
+     col.01line=FALSE,
+     col="red",ylab="betta",xlab="alpha",
+     main="ecdf_p-val")
+```
+
+Мощность критерия против данной альтернативы (линейный тренд) равна 1.
+
+Исследуем мощность критерия, рассмотрев распределение p-values для ряда, удовлетворяющего альтернативной гипотезе и соответствующего функции:$f(x)=x^3+N(0,1)$. 200 значений временного ряда $f(x)$ вычисляются для 200 значений $x$ (с одинаковым шагом) из промежутка $[0,2]$.
+
+```{r}
+set.seed(42)
+plot(ts((seq(0,2,length.out=200))^3+rnorm(200)),ylab="f(t)")
+temp10 <- c(1:10000)
+for (i in c(1:10000)){
+  sq <- seq(0,2,length.out=200)
+  temp10[i] <- MannKendall(ts((sq)^3+rnorm(length(sq))))$sl
+}
+plot(ecdf(temp10),xlim=c(0,1),ylim=c(0,1),verticals=TRUE,do.points=FALSE,
+     col.01line=FALSE,
+     col="red",ylab="betta", xlab="alpha",
+     main="ecdf_p-val")
+```
+
+Мощность критерия против данной альтернативы (кубический тренд) равна 1.
+
+Исследуем мощность критерия, рассмотрев распределение p-values для ряда, удовлетворяющего альтернативной гипотезе и соответствующего функции:$f(x)=x+sin(5x)+N(0,1)$. 200 значений временного ряда $f(x)$ вычисляются для 200 значений $x$ (с одинаковым шагом) из промежутка $[0,10]$.
+
+```{r}
+set.seed(42)
+plot(ts(seq(0,10,length.out=200)+rnorm(200)+sin(seq(0,10,length.out=200)*5)),
+     ylab="f(t)")
+temp6 <- c(1:10000)
+for (i in c(1:10000)){
+  sq <- seq(0,10,length.out=200)
+  temp6[i] <- MannKendall(ts(sq+rnorm(length(sq))+sin(sq*5)))$sl
+}
+plot(ecdf(temp6),xlim=c(0,1),ylim=c(0,1),verticals=TRUE,do.points=FALSE,
+     col.01line=FALSE,
+     col="red",ylab="betta", xlab="alpha",
+     main="ecdf_p-val")
+```
+
+Мощность критерия против данной альтернативы (линейный тренд + сезонность) равна 1.
+
+Исследуем мощность критерия, рассмотрев распределение p-values для ряда, удовлетворяющего альтернативной гипотезе и соответствующего функции:$f(x)=x+30sin(5x)+N(0,1)$ (предыдущий временной ряд с увеличенной амплитудой сезонных колебаний). 200 значений временного ряда $f(x)$ вычисляются для 200 значений $x$ (с одинаковым шагом) из промежутка $[0,10]$. Сравним с предыдущей альтернативой. 
+
+```{r}
+set.seed(42)
+plot(ts(seq(0,10,length.out=200)+rnorm(200)+30*sin(seq(0,10,length.out=200)*5)),
+     ylab="f(t)")
+temp7 <- c(1:10000)
+for (i in c(1:10000)){
+  sq <- seq(0,10,length.out=200)
+  temp7[i] <- MannKendall(ts(sq+rnorm(length(sq))+30*sin(sq*5)))$sl
+}
+plot(ecdf(temp7),xlim=c(0,1),ylim=c(0,1),verticals=TRUE,do.points=FALSE,
+     col.01line=FALSE,col="red",ylab="betta", xlab="alpha",
+     main="ecdf_p-val")
+lines(ecdf(temp6),verticals=TRUE,do.points=FALSE,
+      col="blue",xlim=c(0,1),ylim=c(0,1))
+legend("bottomright",legend = c("F_30sin", "F_sin"), 
+       col = c("red","blue"),lwd=1)
+```
+
+Видно, что при увеличении амплитуды сезонных колебаний мощность уменьшилась. Мощность также увеличится при выполнении условий предыдущего пункта для ошибки первого рода (мощность вырастет при увеличении числа колебаний относительно длины ряда).
+
+Рассмотрим в качестве альтернативы ряд с немонотонным трендом. Пусть 
+$$f_1(t)=
+\begin{cases}
+   \frac{1}{50}(t-99)^2+N(0,100),\ t\leqslant99
+   \\
+   t-99+N(0,100),\ else.
+ \end{cases},\ t=\overline{0,199}$$
+
+
+
+```{r}
+x1 <- c(-99:0)
+x2 <- c(1:100)
+plot(ts(c((x1^2)/50, x2)+rnorm(200,0,10)),ylab="f1(t)")
+temp8 <- c(1:10000)
+for (i in c(1:10000)){
+  temp8[i] <- MannKendall(ts(c((x1^2)/50, x2)+rnorm(200,0,10)))$sl
+}
+plot(ecdf(temp8),xlim=c(0,1),ylim=c(0,1),verticals=TRUE,do.points=FALSE,
+     col.01line=FALSE,col="red",ylab="betta", xlab="alpha",
+     main="ecdf_p-val")
+lines(ecdf(temp10),verticals=TRUE,do.points=FALSE,
+      col="blue",xlim=c(0,1),ylim=c(0,1))
+legend("bottomright",legend = c("F_f1", "F_t^3"), col = c("red","blue"),lwd=1)
+```
+
+Видно, что критерий имеет низкую мощность против ряда с немонотонным трендом.
+
+Таким образом, удалось убедиться, что данный критерий должен использоваться для выявления монотонного тренда, так как критерий является мощным против такой альтернативы. Критерий можно пытаться использовать для временных рядов с сезонностью, однако он может оказаться маломощным или радикальным. Существуют вариации критерия (Seasonal Mann-Kendall) для работы с такими временными рядами.

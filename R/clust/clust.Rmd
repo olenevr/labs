@@ -1,0 +1,177 @@
+---
+title: "Untitled"
+author: "Roman Olenev"
+date: "2023-12-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("FactoMineR")
+library("factoextra")
+library(ggplot2)
+library(GGally)
+library(candisc)
+library("dplyr")
+library("EMCluster")
+library(tidyr)
+library(mclust)
+select <-dplyr::select
+```
+
+Данные про опоссумов. 
+```{r}
+dataset23 <- read.csv("C:/Users/roman/Downloads/possum.csv")
+dataset23 <- drop_na(dataset23)
+```
+
+Стандартизуем данные. 
+```{r}
+head(dataset23)
+dataset2 <- dataset23 %>% select(-c(case,site,Pop,sex))
+dataset2 <- data.frame(scale(dataset2, center=TRUE, scale=TRUE))
+dataset2_mult <- dataset2 %>% mutate(earconch=earconch*3)
+head(dataset2)
+```
+
+pairplot.
+```{r, message=FALSE}
+ggpairs(dataset2)
+```
+
+PCA для визуализации.
+```{r}
+pcaclust2 <- PCA(dataset2)
+```
+
+```{r}
+fviz_pca_biplot(pcaclust2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(dataset23$Pop),
+                )
+```
+
+K-means для 2 кластеров. Не очень хороший результат - k-means поделил на шарики.
+```{r}
+res22 <- kmeans(dataset2, centers=2, iter=100)
+```
+
+```{r}
+fviz_pca_biplot(pcaclust2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(res22$cluster),
+                )
+```
+
+Если умножить признак earconch, по которому сильное отличие, на 3, то получится правильное разделение. 
+```{r}
+res22_mult <- kmeans(dataset2_mult, centers=2, iter=100)
+
+fviz_pca_biplot(pcaclust2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(res22_mult$cluster),
+                )
+```
+
+
+Иерархическая кластеризация. На вход подается матрица расстояний, в данном случае метрика евклидова. Метод объединения complete, то есть по максимальному расстоянию между кластерами. Получается примерно то же, что и у k-means. Изменение метода объединения не исправляет ситуацию.  
+```{r}
+dist_poss <- dist(dataset2)
+res_poss <- hclust(dist_poss, method="complete")
+plot(res_poss)
+cuts <- cutree(res_poss, h=8)
+fviz_pca_biplot(pcaclust2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(cuts),
+                )
+```
+
+Model-based. Посмотрим на лучшие модели по BIC. Видно, что лучше всего модели с 3 кластерами (одинаково ориентированные эллипсы с одинаковыми или разными объемами)
+```{r}
+BIC <- mclustBIC(dataset2)
+plot(BIC)
+summary(BIC)
+```
+
+Кластеризация, модель EEE.  
+```{r}
+res_poss3 <- Mclust(dataset2, method="EEE", G=3)
+fviz_pca_biplot(pcaclust2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(res_poss3$classification),
+                )
+```
+
+3 кластера в плоскости канонических переменных. Видно, что в данных на самом деле 3 класса. (Популяция other делится на 2)
+```{r, message=FALSE}
+dataset_can <- dataset2
+dataset_can$Species <- as.factor(res_poss3$classification)
+poss.manova <- manova(cbind(age,hdlngth,skullw,totlngth,taill,footlgth,earconch,eye,chest,belly) ~ Species, data = dataset_can)
+result.candisc <- candisc(poss.manova)
+ggplot(result.candisc$scores) +
+    geom_point(aes(x = Can1, y = Can2, color = Species)) +
+    stat_ellipse(aes(x = Can1, y = Can2, color = Species)) +
+    geom_segment(as.data.frame(result.candisc$structure), mapping = aes(x = 0, y = 0, xend = 6.5 * Can1, yend = 6.5 * Can2), arrow = arrow(angle = 10, type = "closed"), size = 0.5)
+```
+
+Применение k-means и hclust для 3 классов не дает тех же результатов. 
+```{r}
+dist_poss2 <- dist(dataset2)
+res_poss2 <- hclust(dist_poss2, method="complete")
+plot(res_poss2)
+cuts2 <- cutree(res_poss2, k=3)
+fviz_pca_biplot(pcaclust2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(cuts2),
+                )
+```
+
+```{r}
+res22_3 <- kmeans(dataset2, centers=3, iter=100)
+```
+
+```{r}
+fviz_pca_biplot(pcaclust2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(res22_3$cluster),
+                )
+```
+
+Model-based для 2 классов. 
+```{r}
+res_poss32 <- Mclust(dataset2, method="VEE", G=2)
+fviz_pca_biplot(pcaclust2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(res_poss32$classification),
+                )
+
+```
+
+
+
+```{r}
+Pops <- as.numeric(as.factor(dataset23$Pop))
+```
+
+Confusion matrix для Model-based.
+```{r}
+ct <- table(res_poss32$classification, Pops)
+ct
+diag(prop.table(ct, 2))
+```
+
+Confusion matrix для k-means.
+```{r}
+ct2 <- table((res22$cluster)%%2+1, Pops)
+ct2
+diag(prop.table(ct2, 2))
+```
+
+Confusion matrix для hclust.
+```{r}
+ct3 <- table(cuts, Pops)
+ct3
+diag(prop.table(ct3, 2))
+```
+
+С помощью model-based подхода удалось обнаружить, что в данных 3 популяции - популяция other содержит в себе 2 различающиеся группы. 
