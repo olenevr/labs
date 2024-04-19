@@ -1,0 +1,330 @@
+---
+title: "Untitled"
+author: "Roman Olenev"
+date: "2023-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("FactoMineR")
+library("factoextra")
+library(ggplot2)
+library(GGally)
+library(tidyr)
+library("dplyr")
+```
+
+```{r}
+dataset <- read.csv("C:/Users/roman/Downloads/possum.csv")
+head(dataset)
+dataset <- dataset %>% select(-case)
+```
+
+site - место, в котором поймали опоссума
+
+Pop - популяция: Vic - Victoria, other - New South Wales or Queensland
+
+sex - пол
+
+age - возраст
+
+hdlngth - длина головы в мм
+
+skullw - ширина черепа в мм
+
+totlngth - полная длина в см
+
+taill - длина хвоста
+
+footlgth - длина лапы
+
+earconch - длина ушной раковины
+
+eye - длина правого глаза
+
+chest - обхват груди в см
+
+belly - обхват живота в см
+
+Удаляем пропуски в данных
+```{r}
+na_num <- sapply(dataset, function(y) sum(length(which(is.na(y)))))
+na_num
+```
+
+```{r}
+dataset1 <- drop_na(dataset)
+sum(is.na(dataset1))
+```
+Видна неоднородность
+```{r, message=F}
+dataset2 <- dataset1 %>% select(-c(Pop,sex))
+ggpairs(dataset2)
+```
+
+```{r, message=F}
+dataset2 <- dataset1 %>% select(-Pop)
+ggpairs(dataset2, aes(color=sex), diag=list(continuous="barDiag"))
+```
+
+Неоднородность по признаку Pop
+```{r, message=F}
+dataset2 <- dataset1 %>% select(-sex)
+ggpairs(dataset2, aes(color=Pop), diag=list(continuous="barDiag"))
+```
+
+```{r}
+dataset3 <- dataset1 %>% select(-c(Pop,sex))
+pca_result = PCA(dataset3, ncp=6)
+```
+
+Первый график - проекции индивидов на плоскость первых 2 главных компонент
+
+Второй график - исходные признаки с координатами ($f_{i1},f_{i2}$) равными корреляции между ними и главными компонентами
+
+
+Векторы U
+
+Первая главная компонента - общее значение (размер), признак site со знаком минус, т.к отрицательная корреляция с footlgth и earconch
+
+Вторая главная компонента - разница между site+taill и footlgth+earconch
+
+Третья главная компонента - разница между age+eye и totlngth+taill+footlgth
+
+Четвертая главная компонента - разница между eye и age+chest+belly
+
+```{r}
+head(dataset3)
+pca_result$svd$V
+```
+
+Собственные числа и вклад в общую дисперсию
+```{r}
+fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 50))
+```
+
+```{r}
+pca_result$eig
+```
+
+Координаты признаков (матрица F)
+```{r}
+pca_result$var$coord
+```
+
+$f_{ij}^2$
+```{r}
+pca_result$var$cos2
+```
+
+$\frac{f_{ij}^2}{\lambda_j}\cdot{100}$, фактически векторы U с элементами, возведенными в квадрат и умноженными на 100
+```{r}
+pca_result$var$contrib
+```
+
+Координаты индивидов в новых признаках (матрица Z)
+```{r}
+pca_result$ind$coord[1:6,]
+```
+
+$\frac{z_{ij}^2}{||x_i||^2}$, $x_i$ - индивид
+```{r}
+pca_result$ind$cos2[1:6,]
+```
+
+Индивиды и проекции ортов в плоскости первых 2 главных компонент
+```{r}
+fviz_pca_biplot(pca_result, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(dataset1$Pop),
+                legend.title="Pop"
+                )
+```
+
+```{r}
+fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = as.factor(dataset1$site),
+             addEllipses = TRUE,
+             legend.title = "Site"
+             )
+```
+
+Выброс, индивид 51: большой опоссум с маленькими ушами и лапами, длинным хвостом
+```{r}
+dataset3[51,]
+```
+
+Выброс, индивид 39: маленький опоссум с большими ушами и лапами
+```{r}
+dataset3[39,]
+```
+
+Удаляем выбросы
+```{r}
+dataset4 <- dataset3[-c(39,51),]
+pca_result2 <- PCA(dataset4, ncp=6)
+```
+
+Biplot без выбросов
+```{r}
+fviz_pca_biplot(pca_result2, repel = FALSE,
+                col.var = "#2E9FDF",
+                col.ind = as.factor(dataset1[-c(39,51),]$Pop),
+                legend.title="Pop"
+                )
+```
+
+```{r}
+dataset5 <- dataset1 %>% select(-c(sex,site))
+head(dataset5)
+dataset5[,1] <- as.factor(dataset5[,1])
+```
+
+```{r}
+library("caTools")
+set.seed(13)
+sample <- sample.split(dataset5, SplitRatio = 0.75) 
+train <- subset(dataset5, sample == TRUE)
+test <- subset(dataset5, sample == FALSE)
+```
+
+
+```{r}
+train.manova <- manova(cbind(age,hdlngth,skullw,totlngth,taill,footlgth,earconch,eye,chest,belly) ~ Pop, data = train)
+
+summary(train.manova, 'Wilks')
+summary(train.manova, 'Roy')
+```
+
+```{r}
+library(QuantPsyc)
+mult.norm(dataset5[which(dataset5$Pop=="Vic"),2:11])
+```
+
+
+```{r}
+full.manova <- manova(cbind(age,hdlngth,skullw,totlngth,taill,footlgth,earconch,eye,chest,belly) ~ Pop, data = dataset5)
+
+summary(full.manova, 'Wilks')
+summary(full.manova, 'Roy')
+full.manova
+```
+
+```{r}
+library("MASS") 
+full.lda <- lda(dataset5[,2:11], dataset5[,1]) #LDA
+full.ldap <- predict(full.lda, dataset5[,2:11]) #предсказываем
+#таблица ошибок классификации
+full.ldapc <- full.ldap$class 
+ct <- table(full.ldapc, dataset5[,1])
+ct
+diag(prop.table(ct, 2)) #Столбцы - настоящие классы, строки - предсказанные классы.
+```
+
+```{r}
+#таблица ошибок классификации по train data на train и test
+train.lda <- lda(train[,2:11], train[,1]) 
+train.ldap <- predict(train.lda, test[,2:11])
+train.ldapc <- train.ldap$class
+ct <- table(train.ldapc, test[,1])
+ct
+diag(prop.table(ct, 2))
+train.ldap <- predict(train.lda, train[,2:11])
+train.ldapc <- train.ldap$class
+ct <- table(train.ldapc, train[,1])
+ct
+diag(prop.table(ct, 2))
+```
+
+```{r}
+train.lda
+```
+
+
+```{r}
+#Кросс-валидация
+cv.lda <- lda(dataset5[,2:11], dataset5[,1], CV = T)
+cv.ldac <- cv.lda$class
+ct <- table(cv.ldac, dataset5[,1])
+ct
+diag(prop.table(ct, 2))
+```
+
+```{r}
+#QDA
+full.qda <- qda(dataset5[,2:11], dataset5[,1])
+full.qdap <- predict(full.qda, dataset5[,2:11])
+full.qdapc <- full.qdap$class
+ct <- table(full.qdapc, dataset5[,1])
+ct
+diag(prop.table(ct, 2))
+```
+```{r}
+train.qda <- qda(train[,2:11], train[,1]) 
+test.qdap <- predict(train.qda, test[,2:11])
+test.qdapc <- test.qdap$class
+ct <- table(test.qdapc, test[,1])
+ct
+diag(prop.table(ct, 2))
+train.qdap <- predict(train.qda, train[,2:11])
+train.qdapc <- train.qdap$class
+ct <- table(train.qdapc, train[,1])
+ct
+diag(prop.table(ct, 2))
+```
+
+```{r}
+train.qda
+```
+
+```{r}
+#Кросс-валидация
+cv.qda <- qda(dataset5[,2:11], dataset5[,1], CV = T)
+cv.qdac <- cv.qda$class
+ct11 <- table(cv.qdac, dataset5[,1])
+ct11
+diag(prop.table(ct11, 2))
+```
+
+```{r}
+library(FSA)
+two.lda <- lda(dataset5[,2:11], dataset5[,1]) 
+two.ldap <- predict(two.lda, dataset5[,2:11])
+two.cv.lda <- lda(dataset5[,2:11], dataset5[,1], CV = T)
+
+
+library(ROCR)
+pred <- prediction(two.ldap$posterior[,2], dataset5[,1]) #Переводит данные в стандартизированный формат. Первый параметр - предсказания, второй - настоящая классификация.
+perf <- performance(pred, "tpr", "fpr") #Строит ROC-кривую
+plot(perf, colorize = TRUE) #рисует ее
+AUC.ROCR <- performance(pred, "auc") #Считает AUC
+abline(a = 0, b = 1)
+text(x = .25, y = .65, paste("AUC = ", round(AUC.ROCR@y.values[[1]],5))) #Добавляет значение AUC на график
+```
+
+
+```{r}
+predcv <- prediction(two.cv.lda$posterior[,2], dataset5[,1])
+perfcv <- performance(predcv, "tpr", "fpr")
+plot(perfcv, colorize = TRUE)
+AUCcv <- performance(predcv, "auc")
+abline(a = 0, b = 1)
+text(x = .25, y = .65, paste("AUC = ", round(AUCcv@y.values[[1]],5)))
+```
+
+```{r}
+predcv2 <- prediction(cv.qda$posterior[,2], dataset5[,1])
+perfcv2 <- performance(predcv2, "tpr", "fpr")
+plot(perfcv2, colorize = TRUE)
+AUCcv2 <- performance(predcv2, "auc")
+abline(a = 0, b = 1)
+text(x = .25, y = .65, paste("AUC = ", round(AUCcv2@y.values[[1]],5)))
+```
+
+```{r}
+full.lda <- lda(dataset5[,2:11], dataset5[,1])
+full.lda
+```
+
